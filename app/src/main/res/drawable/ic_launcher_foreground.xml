@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mari mark: an open page with text lines and a bookmark ribbon. 108dp adaptive canvas, safe zone 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#F3DCC2" android:pathData="M34,28h32l8,8v44h-40z" />
+    <path android:fillColor="#C99A6B" android:pathData="M66,28v8h8z" />
+    <path android:strokeColor="#7A5A3A" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M41,44H63M41,52H67M41,60H67M41,68H57" />
+    <path android:fillColor="#E8705A" android:pathData="M58,24h8v18l-4,-3l-4,3z" />
+</vector>

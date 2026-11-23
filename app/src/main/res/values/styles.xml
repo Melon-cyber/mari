@@ -1,0 +1,8 @@
+<resources>
+    <color name="brand_background">#241D16</color>
+    <style name="Theme.Mari" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">#121110</item>
+        <item name="android:colorAccent">#E8B98A</item>
+    </style>
+</resources>
