@@ -109,7 +109,8 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
     var query by rememberSaveable { mutableStateOf("") }
     var adding by remember { mutableStateOf(false) }
     if (adding) AddDialog(close = { adding = false }) { adding = false; model.add(it) }
-    BackHandler(enabled = searching) { searching = false; query = "" }
+    BackHandler(enabled = searching) { searching = false; query = ""; model.clearSearch() }
+    if (searching) { SearchScreen(model, close = { searching = false; model.clearSearch() }); return }
 
     val shown = articles.filter {
         when (shelf) { Shelf.UNREAD -> it.status == Status.UNREAD; Shelf.FAVORITE -> it.favorite; Shelf.ARCHIVE -> it.status == Status.ARCHIVED }
@@ -121,13 +122,8 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (searching) TextField(query, { query = it }, singleLine = true, placeholder = { Text("Поиск по статьям") }, modifier = Modifier.weight(1f),
-                        colors = TextFieldDefaults.colors(focusedContainerColor = Panel, unfocusedContainerColor = Panel, focusedIndicatorColor = Accent, unfocusedIndicatorColor = Line),
-                        trailingIcon = { IconButton(onClick = { searching = false; query = "" }) { Icon(Icons.Rounded.Close, "Закрыть поиск") } })
-                    else {
-                        Text("Мари", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
-                        if (articles.isNotEmpty()) IconButton(onClick = { searching = true }) { Icon(Icons.Rounded.Search, "Поиск") }
-                    }
+                    Text("Мари", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { searching = true }) { Icon(Icons.Rounded.Search, "Поиск") }
                 }
             }
             if (articles.isNotEmpty()) item {
@@ -143,8 +139,9 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
                 Column(Modifier.fillMaxWidth().padding(20.dp).clip(RoundedCornerShape(22.dp)).background(Panel).padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Rounded.AutoStories, null, tint = Accent, modifier = Modifier.size(32.dp))
                     Text("Сохраняй, чтобы прочитать потом", style = MaterialTheme.typography.titleLarge)
-                    Text("В браузере или в Telegram нажми «Поделиться» → «Мари». Статья сохранится без рекламы и лишнего, её можно читать без интернета или слушать голосом.\n\nЕщё можно нажать «Ссылка» внизу и вставить адрес.",
+                    Text("В браузере или в Telegram нажми «Поделиться» → «Мари». Статья сохранится без рекламы и лишнего, её можно читать без интернета или слушать голосом.\n\nЕщё можно найти статью прямо здесь через поиск вверху или нажать «Ссылка» внизу и вставить адрес.",
                         color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { searching = true }) { Icon(Icons.Rounded.Search, null); Text("  Найти статью") }
                 }
             } else if (shown.isEmpty()) item {
                 Text(when { query.isNotBlank() -> "Ничего не нашлось."; shelf == Shelf.UNREAD -> "Всё прочитано 🎉"; shelf == Shelf.FAVORITE -> "Отмечай звёздочкой то, к чему захочешь вернуться."; else -> "Прочитанные статьи будут здесь." },

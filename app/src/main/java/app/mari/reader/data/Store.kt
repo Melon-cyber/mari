@@ -137,7 +137,7 @@ class Store(context: Context, private val scope: CoroutineScope) {
 
     @Suppress("USELESS_ELVIS")
     private fun repair(s: Settings) = s.copy(theme = s.theme ?: ReaderTheme.DARK, fontSize = s.fontSize.coerceIn(14, 30), lineHeight = s.lineHeight.takeIf { it in 1.2f..2.2f } ?: 1.6f,
-        voiceRate = s.voiceRate.takeIf { it in .5f..2.5f } ?: 1f)
+        voiceRate = s.voiceRate.takeIf { it in .5f..2.5f } ?: 1f, searchEngine = s.searchEngine ?: "YANDEX")
 
     private fun idOf(url: String) = MessageDigest.getInstance("SHA-1").digest(url.substringBefore('#').toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
 }

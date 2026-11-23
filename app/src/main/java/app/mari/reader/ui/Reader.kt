@@ -140,7 +140,20 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
                     if (article.image.isNotBlank()) AsyncImage(article.image, null, contentScale = ContentScale.FillWidth,
                         modifier = Modifier.padding(top = 18.dp).fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(14.dp)))
                     Spacer(Modifier.height(12.dp))
-                    if (blocks.isEmpty()) Text("Текст статьи не сохранился. Открой её в браузере из меню «⋮».", color = p.muted, modifier = Modifier.padding(top = 20.dp))
+                    when {
+                        article.loading -> Row(Modifier.padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.CircularProgressIndicator(color = p.accent, strokeWidth = 2.dp, modifier = Modifier.padding(end = 12.dp).height(20.dp).width(20.dp))
+                            Text("Загружаем текст статьи…", color = p.muted)
+                        }
+                        article.error.isNotEmpty() -> Column(Modifier.padding(top = 20.dp)) {
+                            Text(article.error, color = p.muted)
+                            Row {
+                                TextButton(onClick = { model.retry(article.id) }) { Text("Повторить", color = p.accent) }
+                                TextButton(onClick = { openInBrowser(context, article.url) }) { Text("Открыть в браузере", color = p.accent) }
+                            }
+                        }
+                        blocks.isEmpty() -> Text("Текст статьи не сохранился. Открой её в браузере из меню «⋮».", color = p.muted, modifier = Modifier.padding(top = 20.dp))
+                    }
                 }
             }
             itemsIndexed(blocks) { i, b ->

@@ -14,8 +14,8 @@ android {
         applicationId = "app.mari.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
     // One signing key for every build, so updates install over the app with its data.
     // keystore.properties (not in Git) points to the key; without it the standard debug key of this computer is used.

@@ -45,7 +45,10 @@ data class Settings(
     val theme: ReaderTheme = ReaderTheme.DARK,
     val lineHeight: Float = 1.6f,
     val voiceRate: Float = 1f,
-)
+    val searchEngine: String = "YANDEX",
+) {
+    val engine: Engine get() = runCatching { Engine.valueOf(searchEngine) }.getOrDefault(Engine.YANDEX)
+}
 
 fun plural(n: Int, one: String, few: String, many: String): String {
     val m100 = n % 100; val m10 = n % 10
