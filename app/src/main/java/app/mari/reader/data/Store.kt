@@ -88,6 +88,16 @@ class Store(context: Context, private val scope: CoroutineScope) {
 
     fun setStatus(id: String, status: Status) = update(id) { it?.copy(status = status, progress = if (status == Status.UNREAD && it.progress >= .98f) 0f else it.progress, position = if (status == Status.UNREAD && it.progress >= .98f) 0 else it.position) }
     fun favorite(id: String, on: Boolean) = update(id) { it?.copy(favorite = on) }
+    fun addHighlight(id: String, h: Highlight) = update(id) { a ->
+        // A new mark that overlaps old ones in the same paragraph joins them into one.
+        a?.let {
+            val overlapping = it.highlights.filter { o -> o.block == h.block && o.start < h.end && h.start < o.end }
+            val merged = if (overlapping.isEmpty()) h else h.copy(start = minOf(h.start, overlapping.minOf { o -> o.start }), end = maxOf(h.end, overlapping.maxOf { o -> o.end }))
+            val text = blocks(id).getOrNull(merged.block)?.text?.let { t -> t.substring(merged.start.coerceIn(0, t.length), merged.end.coerceIn(0, t.length)) } ?: merged.text
+            it.copy(highlights = it.highlights - overlapping.toSet() + merged.copy(text = text.trim()))
+        }
+    }
+    fun removeHighlight(id: String, highlightId: String) = update(id) { it?.copy(highlights = it.highlights.filter { h -> h.id != highlightId }) }
     fun progress(id: String, position: Int, share: Float) = update(id) { it?.copy(position = position, progress = share.coerceIn(0f, 1f)) }
 
     /** Removes an article; returns what is needed to bring it back. */
@@ -131,7 +141,7 @@ class Store(context: Context, private val scope: CoroutineScope) {
         gson.fromJson<List<Article>>(indexFile.readText(), object : TypeToken<List<Article>>() {}.type)
     }.getOrNull().orEmpty().filter { it?.id != null && it.url != null }.map { a ->
         @Suppress("USELESS_ELVIS", "SENSELESS_COMPARISON")
-        a.copy(title = a.title ?: a.url, site = a.site ?: "", author = a.author ?: "", image = a.image ?: "", excerpt = a.excerpt ?: "",
+        a.copy(highlights = (a.highlights ?: emptyList()).filter { it?.id != null && it.text != null }, title = a.title ?: a.url, site = a.site ?: "", author = a.author ?: "", image = a.image ?: "", excerpt = a.excerpt ?: "",
             status = a.status ?: Status.UNREAD, error = if (a.loading) "Загрузка прервалась. Нажми «Повторить»." else a.error ?: "", loading = false)
     }
 

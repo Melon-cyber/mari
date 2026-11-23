@@ -105,6 +105,22 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
     var menu by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val listening = voice.articleId == article.id
+    var marksOpen by remember { mutableStateOf(false) }
+    var tapped by remember { mutableStateOf<app.mari.reader.data.Highlight?>(null) }
+    val jump by model.jump.collectAsStateWithLifecycle()
+    LaunchedEffect(jump, blocks.size) { jump?.let { b -> if (b in blocks.indices) list.scrollToItem(b + headerItems, -120); model.jumped() } }
+    if (marksOpen) ModalBottomSheet(onDismissRequest = { marksOpen = false }, containerColor = Panel) {
+        HighlightList(article) { h -> marksOpen = false; model.jumpTo(article.id, h.block) }
+    }
+    tapped?.let { h ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = { tapped = null }, title = { Text("Выделение") },
+            text = { Text("«${h.text}»", fontStyle = FontStyle.Italic) },
+            confirmButton = { TextButton(onClick = {
+                tapped = null
+                runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "«${h.text}»\n— ${article.title}\n${article.url}"), "Поделиться цитатой")) }
+            }) { Text("Поделиться") } },
+            dismissButton = { TextButton(onClick = { tapped = null; model.unmark(article, h) }) { Text("Убрать выделение") } })
+    }
 
     val share = if (blocks.isEmpty()) 0f else {
         val last = list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -159,7 +175,10 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
             itemsIndexed(blocks) { i, b ->
                 val current = listening && voice.index == i
                 Box(Modifier.fillMaxWidth().background(if (current) p.mark else Color.Transparent).then(if (listening) Modifier.clickable { model.voiceJump(i) } else Modifier)
-                    .padding(horizontal = 22.dp, vertical = 6.dp)) { BlockView(b, settings, p) }
+                    .padding(horizontal = 22.dp, vertical = 6.dp)) {
+                    BlockView(b, settings, p, article.highlights.filter { it.block == i }, markerColor(settings.theme),
+                        onMark = { s, e -> model.mark(article, i, s, e) }, onTapMark = { tapped = it })
+                }
             }
             if (blocks.isNotEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -184,6 +203,7 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text(if (article.favorite) "Убрать из избранного" else "В избранное") }, onClick = { menu = false; model.favorite(article) })
                         DropdownMenuItem(text = { Text(if (article.status == Status.ARCHIVED) "Вернуть в «Читать»" else "Отметить прочитанным") }, onClick = { menu = false; model.archive(article) })
+                        DropdownMenuItem(text = { Text(if (article.highlights.isEmpty()) "Выделения" else "Выделения (${article.highlights.size})") }, onClick = { menu = false; marksOpen = true })
                         DropdownMenuItem(text = { Text("Открыть в браузере") }, onClick = { menu = false; openInBrowser(context, article.url) })
                         DropdownMenuItem(text = { Text("Поделиться ссылкой") }, onClick = {
                             menu = false
@@ -200,26 +220,29 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
     }
 }
 
-@Composable private fun BlockView(b: Block, s: Settings, p: Palette) {
+@Composable private fun BlockView(b: Block, s: Settings, p: Palette, marks: List<app.mari.reader.data.Highlight>, marker: Int, onMark: (Int, Int) -> Unit, onTapMark: (app.mari.reader.data.Highlight) -> Unit) {
+    val markable = @Composable { size: Float, italic: Boolean, bold: Boolean, m: Modifier ->
+        MarkableText(b.text, marks, size, s.lineHeight, s.serif, italic, bold, p.text, marker, p.accent, m, onMark, onTapMark)
+    }
     val family = if (s.serif) FontFamily.Serif else Manrope
     val body = TextStyle(fontFamily = family, fontSize = s.fontSize.sp, lineHeight = (s.fontSize * s.lineHeight).sp, color = p.text)
     when (b.type) {
-        Block.HEADING -> Text(b.text, style = body.copy(fontSize = (s.fontSize + 4).sp, lineHeight = (s.fontSize + 4).sp * 1.3f, fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 14.dp))
+        Block.HEADING -> markable(s.fontSize + 4f, false, true, Modifier.padding(top = 14.dp))
         Block.IMAGE -> Column(Modifier.padding(vertical = 8.dp)) {
             AsyncImage(b.url, b.text.ifBlank { null }, contentScale = ContentScale.FillWidth, modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp).clip(RoundedCornerShape(12.dp)))
             if (b.text.isNotBlank()) Text(b.text, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
         }
         Block.ITEM -> Row {
             if (!b.text.first().isDigit()) Text("•", style = body, color = p.accent, modifier = Modifier.width(18.dp))
-            SelectionContainer { Text(b.text, style = body) }
+            markable(s.fontSize.toFloat(), false, false, Modifier)
         }
         Block.QUOTE -> Row(Modifier.padding(vertical = 4.dp).height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(p.accent))
-            SelectionContainer { Text(b.text, style = body.copy(fontStyle = FontStyle.Italic), modifier = Modifier.padding(start = 14.dp)) }
+            markable(s.fontSize.toFloat(), true, false, Modifier.padding(start = 14.dp))
         }
         Block.CODE -> Text(b.text, style = body.copy(fontFamily = FontFamily.Monospace, fontSize = (s.fontSize - 4).sp, lineHeight = (s.fontSize - 4).sp * 1.4f),
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(p.mark).padding(12.dp))
-        else -> SelectionContainer { Text(b.text, style = body) }
+        else -> markable(s.fontSize.toFloat(), false, false, Modifier)
     }
 }
 

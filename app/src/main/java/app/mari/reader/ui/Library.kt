@@ -7,6 +7,8 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,7 +100,7 @@ import coil.compose.AsyncImage
     }
 }
 
-private enum class Shelf(val label: String) { UNREAD("Читать"), FAVORITE("Избранное"), ARCHIVE("Прочитано") }
+private enum class Shelf(val label: String) { UNREAD("Читать"), FAVORITE("Избранное"), ARCHIVE("Прочитано"), QUOTES("Цитаты") }
 
 fun openInBrowser(context: Context, url: String) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }
 
@@ -113,7 +115,7 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
     if (searching) { SearchScreen(model, close = { searching = false; model.clearSearch() }); return }
 
     val shown = articles.filter {
-        when (shelf) { Shelf.UNREAD -> it.status == Status.UNREAD; Shelf.FAVORITE -> it.favorite; Shelf.ARCHIVE -> it.status == Status.ARCHIVED }
+        when (shelf) { Shelf.UNREAD -> it.status == Status.UNREAD; Shelf.FAVORITE -> it.favorite; Shelf.ARCHIVE -> it.status == Status.ARCHIVED; Shelf.QUOTES -> false }
     }.filter { query.isBlank() || it.title.contains(query, true) || it.site.contains(query, true) || it.excerpt.contains(query, true) }
         .sortedByDescending { it.saved }
 
@@ -127,9 +129,9 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
                 }
             }
             if (articles.isNotEmpty()) item {
-                Row(Modifier.padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Shelf.entries.forEach { s ->
-                        val count = articles.count { when (s) { Shelf.UNREAD -> it.status == Status.UNREAD; Shelf.FAVORITE -> it.favorite; Shelf.ARCHIVE -> it.status == Status.ARCHIVED } }
+                        val count = if (s == Shelf.QUOTES) articles.sumOf { it.highlights.size } else articles.count { when (s) { Shelf.UNREAD -> it.status == Status.UNREAD; Shelf.FAVORITE -> it.favorite; Shelf.ARCHIVE -> it.status == Status.ARCHIVED; Shelf.QUOTES -> false } }
                         FilterChip(shelf == s, { shelf = s }, label = { Text(if (count > 0) "${s.label} $count" else s.label) },
                             colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent, selectedLabelColor = Ink))
                     }
@@ -142,6 +144,17 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
                     Text("В браузере или в Telegram нажми «Поделиться» → «Мари». Статья сохранится без рекламы и лишнего, её можно читать без интернета или слушать голосом.\n\nЕщё можно найти статью прямо здесь через поиск вверху или нажать «Ссылка» внизу и вставить адрес.",
                         color = Muted, style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { searching = true }) { Icon(Icons.Rounded.Search, null); Text("  Найти статью") }
+                }
+            } else if (shelf == Shelf.QUOTES) {
+                val quotes = articles.flatMap { a -> a.highlights.map { a to it } }.sortedByDescending { it.second.created }
+                    .filter { (a, h) -> query.isBlank() || h.text.contains(query, true) || a.title.contains(query, true) }
+                if (quotes.isEmpty()) item { Text("Выдели слова в статье долгим нажатием и выбери «Выделить» — цитаты соберутся здесь.", color = Muted, modifier = Modifier.padding(20.dp)) }
+                items(quotes, key = { "h" + it.second.id }) { (a, h) ->
+                    Column(Modifier.fillMaxWidth().clickable { model.jumpTo(a.id, h.block) }.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                        Text("«${h.text}»", style = MaterialTheme.typography.bodyLarge.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic))
+                        Text(a.title, style = MaterialTheme.typography.labelMedium, color = Accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                    }
+                    HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = 20.dp))
                 }
             } else if (shown.isEmpty()) item {
                 Text(when { query.isNotBlank() -> "Ничего не нашлось."; shelf == Shelf.UNREAD -> "Всё прочитано 🎉"; shelf == Shelf.FAVORITE -> "Отмечай звёздочкой то, к чему захочешь вернуться."; else -> "Прочитанные статьи будут здесь." },

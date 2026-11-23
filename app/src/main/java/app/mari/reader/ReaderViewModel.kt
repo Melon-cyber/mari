@@ -9,6 +9,7 @@ import app.mari.reader.data.Status
 import androidx.lifecycle.viewModelScope
 import app.mari.reader.data.SavedHit
 import app.mari.reader.data.Engine
+import app.mari.reader.data.Highlight
 import app.mari.reader.data.searchSaved
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,6 +77,23 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun saveOnly(url: String) { store.add(url); note(Note("Сохранено в «Читать»")) }
     fun engine(e: Engine) { store.settings { it.copy(searchEngine = e.name) }; if (mSearch.value.web && mSearch.value.query.isNotBlank()) runSearch() }
     fun open(id: String?) { mOpen.value = id }
+
+    private val mJump = MutableStateFlow<Int?>(null)
+    /** A paragraph the reader should scroll to (from the list of highlights). */
+    val jump = mJump.asStateFlow()
+    fun jumpTo(articleId: String, block: Int) { mOpen.value = articleId; mJump.value = block }
+    fun jumped() { mJump.value = null }
+
+    fun mark(article: Article, block: Int, start: Int, end: Int) {
+        val text = store.blocks(article.id).getOrNull(block)?.text ?: return
+        val s = start.coerceIn(0, text.length); val e = end.coerceIn(s, text.length)
+        if (e - s < 2) return
+        store.addHighlight(article.id, Highlight(java.util.UUID.randomUUID().toString(), block, s, e, text.substring(s, e)))
+    }
+    fun unmark(article: Article, h: Highlight) {
+        store.removeHighlight(article.id, h.id)
+        note(Note("Выделение убрано") { store.addHighlight(article.id, h) })
+    }
 
     fun add(text: String, openIt: Boolean = false) {
         val url = Regex("https?://\\S+").find(text)?.value?.trimEnd('.', ',', ')', '»', '"')

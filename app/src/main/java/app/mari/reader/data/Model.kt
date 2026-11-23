@@ -2,6 +2,9 @@ package app.mari.reader.data
 
 enum class Status { UNREAD, ARCHIVED }
 
+/** Marked words in a paragraph: block number and character range inside it. */
+data class Highlight(val id: String, val block: Int, val start: Int, val end: Int, val text: String, val created: Long = System.currentTimeMillis())
+
 /** One piece of an article: heading, paragraph, image, list item, quote or code. */
 data class Block(val type: String, val text: String = "", val url: String = "") {
     companion object {
@@ -33,6 +36,7 @@ data class Article(
     /** True while the page is being downloaded. */
     val loading: Boolean = false,
     val error: String = "",
+    val highlights: List<Highlight> = emptyList(),
 ) {
     val minutes: Int get() = (words / 180).coerceAtLeast(1)
 }
