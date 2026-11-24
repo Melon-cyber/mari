@@ -44,6 +44,17 @@ fun markerColor(theme: ReaderTheme): Int = when (theme) {
 }
 
 private const val MENU_MARK = 0x4D41
+private const val MENU_MANTRA = 0x4D42
+private const val MANTRA = "app.mantra.cards"
+
+/** The sentence around [start]..[end] in [text], as an example for a flashcard. */
+private fun sentenceAround(text: String, start: Int, end: Int): String {
+    val stops = ".!?…\n"
+    var s = start; while (s > 0 && text[s - 1] !in stops) s--
+    var e = end; while (e < text.length && text[e] !in stops) e++
+    if (e < text.length) e++
+    return text.substring(s, e).trim().take(400)
+}
 
 /**
  * A paragraph that can be marked: select words with a long press and choose «Выделить».
@@ -73,11 +84,35 @@ private const val MENU_MARK = 0x4D41
             setTextIsSelectable(true)
             highlightColor = accent.copy(alpha = .35f).toArgb()
             customSelectionActionModeCallback = object : ActionMode.Callback {
-                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean { menu.add(Menu.NONE, MENU_MARK, 0, "Выделить"); return true }
-                override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+                private val mantra = runCatching { context.packageManager.getLaunchIntentForPackage(MANTRA) != null }.getOrDefault(false)
+                // Мантра also offers itself for any selected text; our own item sends the sentence too, so that one goes.
+                private fun dropDuplicate(menu: Menu): Boolean {
+                    val extra = (0 until menu.size()).map { menu.getItem(it) }.filter { it.itemId != MENU_MANTRA && it.intent?.component?.packageName == MANTRA }
+                    extra.forEach { menu.removeItem(it.itemId) }
+                    return extra.isNotEmpty()
+                }
+                override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                    menu.add(Menu.NONE, MENU_MARK, 0, "Выделить")
+                    if (mantra) menu.add(Menu.NONE, MENU_MANTRA, 1, "В Мантру")
+                    dropDuplicate(menu)
+                    return true
+                }
+                override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = mantra && dropDuplicate(menu)
                 override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-                    if (item.itemId != MENU_MARK) return false
                     val start = minOf(selectionStart, selectionEnd); val end = maxOf(selectionStart, selectionEnd)
+                    if (item.itemId == MENU_MANTRA) {
+                        if (end > start) {
+                            val all = text.toString()
+                            val word = all.substring(start, end).trim()
+                            runCatching {
+                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_SEND).setPackage(MANTRA).setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_TEXT, word).putExtra("$MANTRA.CONTEXT", sentenceAround(all, start, end)))
+                            }
+                        }
+                        mode.finish()
+                        return true
+                    }
+                    if (item.itemId != MENU_MARK) return false
                     if (end > start) mark(start, end)
                     mode.finish()
                     return true

@@ -86,6 +86,12 @@ class Store(context: Context, private val scope: CoroutineScope) {
         gson.fromJson<List<Block>>(File(dir, "$id.json").readText(), object : TypeToken<List<Block>>() {}.type)
     }.getOrNull().orEmpty().filter { it?.type != null }
 
+    /** A saved translation of the article, one line per block, or null. */
+    fun translation(id: String): List<String>? = runCatching {
+        gson.fromJson<List<String>>(File(dir, "$id.tr.json").readText(), object : TypeToken<List<String>>() {}.type)
+    }.getOrNull()
+    fun saveTranslation(id: String, lines: List<String>) { runCatching { File(dir, "$id.tr.json").writeText(gson.toJson(lines)) } }
+
     fun setStatus(id: String, status: Status) = update(id) { it?.copy(status = status, progress = if (status == Status.UNREAD && it.progress >= .98f) 0f else it.progress, position = if (status == Status.UNREAD && it.progress >= .98f) 0 else it.position) }
     fun favorite(id: String, on: Boolean) = update(id) { it?.copy(favorite = on) }
     fun addHighlight(id: String, h: Highlight) = update(id) { a ->
@@ -106,6 +112,7 @@ class Store(context: Context, private val scope: CoroutineScope) {
         val blocks = blocks(id)
         synchronized(lock) { mArticles.value = mArticles.value.filter { it.id != id }; writeIndex() }
         File(dir, "$id.json").delete()
+        File(dir, "$id.tr.json").delete()
         return article to blocks
     }
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's own backup to the owner's Google Drive (Android 11 and older): the small data files only, no media. -->
+<full-backup-content>
+    <include domain="file" path="library.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="settings.json" requireFlags="clientSideEncryption" />
+    <include domain="sharedpref" path="." requireFlags="clientSideEncryption" />
+</full-backup-content>

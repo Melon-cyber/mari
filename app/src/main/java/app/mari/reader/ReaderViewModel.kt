@@ -11,6 +11,8 @@ import app.mari.reader.data.SavedHit
 import app.mari.reader.data.Engine
 import app.mari.reader.data.Highlight
 import app.mari.reader.data.searchSaved
+import app.mari.reader.data.ArticleTranslator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,6 +32,18 @@ data class SearchState(
     val hits: List<SavedHit> = emptyList(),
     val error: String? = null,
     val done: Boolean = false,
+)
+
+/** The translation of the open article: [lines] has one line per block; [on] shows it instead of the original. */
+data class TranslationState(
+    val articleId: String = "",
+    val on: Boolean = false,
+    val loading: Boolean = false,
+    val done: Int = 0,
+    val total: Int = 0,
+    val lines: List<String>? = null,
+    val error: String? = null,
+    val to: String = "ru",
 )
 
 class ReaderViewModel(application: Application) : AndroidViewModel(application) {
@@ -121,7 +135,32 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun settings(change: (Settings) -> Settings) = store.settings(change)
 
-    fun listen(article: Article, blocks: List<Block>, from: Int) = app.voice.start(article.id, blocks, from, settings.value.voiceRate)
+    fun listen(article: Article, blocks: List<Block>, from: Int) = app.voice.start(article.id, article.title, blocks, from, settings.value.voiceRate)
+    fun voiceSleep(minutes: Int) = app.voice.sleepIn(minutes)
+
+    private val mTranslation = MutableStateFlow(TranslationState())
+    val translation = mTranslation.asStateFlow()
+    private var translateJob: Job? = null
+
+    /** Shows the article translated: into Russian, or into English for a Russian article. Saved, so it opens offline later. */
+    fun translate(article: Article) {
+        val blocks = store.blocks(article.id)
+        if (blocks.isEmpty()) return
+        val to = ArticleTranslator.target(blocks)
+        store.translation(article.id)?.takeIf { it.size == blocks.size }?.let { mTranslation.value = TranslationState(article.id, on = true, lines = it, to = to); return }
+        translateJob?.cancel()
+        mTranslation.value = TranslationState(article.id, loading = true, to = to)
+        translateJob = viewModelScope.launch {
+            try {
+                val lines = ArticleTranslator.translate(blocks, to) { d, t -> mTranslation.value = mTranslation.value.copy(done = d, total = t) }
+                store.saveTranslation(article.id, lines)
+                mTranslation.value = TranslationState(article.id, on = true, lines = lines, to = to)
+            } catch (e: CancellationException) { throw e } catch (_: Exception) {
+                mTranslation.value = TranslationState(article.id, to = to, error = "Перевод не получился. Проверь интернет и попробуй ещё раз.")
+            }
+        }
+    }
+    fun original() { translateJob?.cancel(); mTranslation.value = mTranslation.value.copy(on = false, loading = false, error = null) }
     fun voiceToggle() = app.voice.toggle()
     fun voiceForward() = app.voice.forward()
     fun voiceBack() = app.voice.back()

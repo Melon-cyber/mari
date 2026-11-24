@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's own backup to the owner's Google Drive and transfer to a new phone: the small data files only, no media,
+     so the copy stays well under Google's 25 MB limit per app. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="library.json" />
+        <include domain="file" path="settings.json" />
+        <include domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="library.json" />
+        <include domain="file" path="settings.json" />
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

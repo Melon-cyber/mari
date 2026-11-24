@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Mari mark: an open page with text lines and a bookmark ribbon. 108dp adaptive canvas, safe zone 66dp. -->
+<!-- Mari: a bookmark whose notch makes the letter M.
+     Drawn on a 108-unit square and scaled into the visible middle of the 108dp adaptive canvas. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#F3DCC2" android:pathData="M34,28h32l8,8v44h-40z" />
-    <path android:fillColor="#C99A6B" android:pathData="M66,28v8h8z" />
-    <path android:strokeColor="#7A5A3A" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M41,44H63M41,52H67M41,60H67M41,68H57" />
-    <path android:fillColor="#E8705A" android:pathData="M58,24h8v18l-4,-3l-4,3z" />
+    <group android:scaleX="0.62" android:scaleY="0.62" android:translateX="20.52" android:translateY="20.52">
+        <path android:pathData="M30,24H78V82L54,60L30,82Z"
+            android:fillColor="#FFF3DCC2" />
+        <path android:pathData="M38,34H70M38,42H70M38,50H62"
+            android:fillColor="#FF000000"
+            android:strokeColor="#FF7A5A3A"
+            android:strokeWidth="3"
+            android:strokeLineCap="round" />
+        <path android:pathData="M62,24h9v16l-4.5,-3.5l-4.5,3.5z"
+            android:fillColor="#FFE8705A" />
+    </group>
 </vector>

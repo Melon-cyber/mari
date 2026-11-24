@@ -34,6 +34,12 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Translate
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -96,7 +102,13 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
 @Composable fun ReaderScreen(model: ReaderViewModel, article: Article, back: () -> Unit) {
     val settings by model.settings.collectAsStateWithLifecycle()
     val voice by model.voice.collectAsStateWithLifecycle()
-    val blocks = remember(article.id, article.words) { model.blocks(article.id) }
+    val original = remember(article.id, article.words) { model.blocks(article.id) }
+    val tr by model.translation.collectAsStateWithLifecycle()
+    val mine = tr.articleId == article.id
+    val lines = tr.lines?.takeIf { mine && tr.on && it.size == original.size }
+    // With the translation on, the same blocks carry the translated text; highlights stay with the original.
+    val blocks = remember(original, lines) { if (lines == null) original else original.mapIndexed { i, b -> if (lines[i].isNotBlank()) b.copy(text = lines[i]) else b } }
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val p = palette(settings.theme)
     // Items before the blocks: the header. Keeps scroll positions and block indexes apart.
     val headerItems = 1
@@ -176,8 +188,9 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
                 val current = listening && voice.index == i
                 Box(Modifier.fillMaxWidth().background(if (current) p.mark else Color.Transparent).then(if (listening) Modifier.clickable { model.voiceJump(i) } else Modifier)
                     .padding(horizontal = 22.dp, vertical = 6.dp)) {
-                    BlockView(b, settings, p, article.highlights.filter { it.block == i }, markerColor(settings.theme),
-                        onMark = { s, e -> model.mark(article, i, s, e) }, onTapMark = { tapped = it })
+                    BlockView(b, settings, p, if (lines != null) emptyList() else article.highlights.filter { it.block == i }, markerColor(settings.theme),
+                        onMark = { s, e -> if (lines != null) model.note(app.mari.reader.Note("Выделять можно в оригинале: меню ⋮ → «Показать оригинал»")) else model.mark(article, i, s, e) },
+                        onTapMark = { tapped = it })
                 }
             }
             if (blocks.isNotEmpty()) item {
@@ -194,7 +207,13 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад", tint = p.text) }
                 Spacer(Modifier.weight(1f))
-                if (blocks.isNotEmpty()) IconButton(onClick = { if (listening) model.voiceToggle() else model.listen(article, blocks, (list.firstVisibleItemIndex - headerItems).coerceAtLeast(0)) }) {
+                if (blocks.isNotEmpty()) IconButton(onClick = {
+                    if (listening) model.voiceToggle() else {
+                        if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                            askNotify.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        model.listen(article, blocks, (list.firstVisibleItemIndex - headerItems).coerceAtLeast(0))
+                    }
+                }) {
                     Icon(Icons.Rounded.Headphones, "Слушать", tint = if (listening) p.accent else p.text)
                 }
                 IconButton(onClick = { textSheet = true }) { Icon(Icons.Rounded.TextFields, "Оформление текста", tint = p.text) }
@@ -203,6 +222,9 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
                     DropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem(text = { Text(if (article.favorite) "Убрать из избранного" else "В избранное") }, onClick = { menu = false; model.favorite(article) })
                         DropdownMenuItem(text = { Text(if (article.status == Status.ARCHIVED) "Вернуть в «Читать»" else "Отметить прочитанным") }, onClick = { menu = false; model.archive(article) })
+                        if (original.isNotEmpty()) DropdownMenuItem(text = { Text(if (lines != null) "Показать оригинал" else if (ArticleLang.isRussian(original)) "Перевести на английский" else "Перевести на русский") },
+                            leadingIcon = { Icon(Icons.Rounded.Translate, null) },
+                            onClick = { menu = false; if (lines != null) model.original() else model.translate(article) })
                         DropdownMenuItem(text = { Text(if (article.highlights.isEmpty()) "Выделения" else "Выделения (${article.highlights.size})") }, onClick = { menu = false; marksOpen = true })
                         DropdownMenuItem(text = { Text("Открыть в браузере") }, onClick = { menu = false; openInBrowser(context, article.url) })
                         DropdownMenuItem(text = { Text("Поделиться ссылкой") }, onClick = {
@@ -214,9 +236,19 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
                 }
             }
             LinearProgressIndicator(progress = { share }, color = p.accent, trackColor = Color.Transparent, drawStopIndicator = {}, modifier = Modifier.fillMaxWidth().height(2.dp))
+            if (mine && (tr.loading || tr.error != null || lines != null)) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Translate, null, tint = p.accent, modifier = Modifier.padding(end = 8.dp).height(18.dp))
+                Text(when {
+                    tr.loading -> if (tr.total > 0) "Переводим… ${tr.done} из ${tr.total} абзацев" else "Переводим…"
+                    tr.error != null -> tr.error!!
+                    else -> if (tr.to == "en") "Перевод на английский" else "Перевод на русский"
+                }, color = p.muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                if (tr.error != null) TextButton(onClick = { model.translate(article) }) { Text("Ещё раз", color = p.accent) }
+                else TextButton(onClick = model::original) { Text(if (tr.loading) "Отмена" else "Оригинал", color = p.accent) }
+            }
         }
-        if (listening) VoiceBar(voice.playing, settings.voiceRate, voice.error, Modifier.align(Alignment.BottomCenter),
-            toggle = model::voiceToggle, back = model::voiceBack, forward = model::voiceForward, close = model::voiceStop, speed = model::voiceSpeed)
+        if (listening) VoiceBar(voice.playing, settings.voiceRate, voice.error, voice.sleepAt, Modifier.align(Alignment.BottomCenter),
+            toggle = model::voiceToggle, back = model::voiceBack, forward = model::voiceForward, close = model::voiceStop, speed = model::voiceSpeed, sleep = model::voiceSleep)
     }
 }
 
@@ -246,12 +278,27 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
     }
 }
 
-@Composable private fun VoiceBar(playing: Boolean, rate: Float, error: String?, modifier: Modifier, toggle: () -> Unit, back: () -> Unit, forward: () -> Unit, close: () -> Unit, speed: (Float) -> Unit) {
+@Composable private fun VoiceBar(playing: Boolean, rate: Float, error: String?, sleepAt: Long, modifier: Modifier, toggle: () -> Unit, back: () -> Unit, forward: () -> Unit,
+                                  close: () -> Unit, speed: (Float) -> Unit, sleep: (Int) -> Unit) {
     var speedMenu by remember { mutableStateOf(false) }
+    var sleepMenu by remember { mutableStateOf(false) }
+    // Minutes left on the sleep timer, refreshed every few seconds.
+    val left by produceState(0, sleepAt) { while (true) { value = if (sleepAt == 0L) 0 else ((sleepAt - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(0); delay(5_000) } }
     Column(modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp).clip(RoundedCornerShape(22.dp)).background(Elevated).padding(horizontal = 8.dp, vertical = 6.dp)) {
         if (error != null) Text(error, color = Coral, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = close) { Icon(Icons.Rounded.Close, "Остановить чтение") }
+            Box {
+                TextButton(onClick = { sleepMenu = true }) {
+                    Icon(Icons.Rounded.Bedtime, "Таймер сна", tint = if (sleepAt > 0) Accent else SoftWhite)
+                    if (sleepAt > 0) Text(" $left мин", color = Accent, style = MaterialTheme.typography.labelMedium)
+                }
+                DropdownMenu(sleepMenu, { sleepMenu = false }) {
+                    Text("Остановить через", style = MaterialTheme.typography.labelMedium, color = Muted, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                    listOf(10, 20, 30, 45, 60).forEach { m -> DropdownMenuItem(text = { Text("$m мин") }, onClick = { sleepMenu = false; sleep(m) }) }
+                    if (sleepAt > 0) DropdownMenuItem(text = { Text("Выключить таймер") }, onClick = { sleepMenu = false; sleep(0) })
+                }
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = back) { Icon(Icons.Rounded.FastRewind, "Предыдущий абзац") }
             Box(Modifier.clip(RoundedCornerShape(50)).background(Accent).clickable(onClick = toggle).padding(12.dp)) {
@@ -268,6 +315,8 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
         }
     }
 }
+
+private object ArticleLang { fun isRussian(blocks: List<Block>) = app.mari.reader.data.ArticleTranslator.target(blocks) == "en" }
 
 private fun speedText(v: Float) = (if (v % 1f == 0f) "%.0f".format(java.util.Locale.US, v) else v.toString()).replace('.', ',') + "×"
 
