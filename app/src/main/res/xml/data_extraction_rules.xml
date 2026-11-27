@@ -5,11 +5,13 @@
     <cloud-backup disableIfNoEncryptionCapabilities="true">
         <include domain="file" path="library.json" />
         <include domain="file" path="settings.json" />
+        <include domain="file" path="reading.json" />
         <include domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="library.json" />
         <include domain="file" path="settings.json" />
+        <include domain="file" path="reading.json" />
         <include domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>

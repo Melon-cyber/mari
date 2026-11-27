@@ -87,6 +87,11 @@ import app.mari.reader.data.Status
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 private data class Palette(val background: Color, val text: Color, val muted: Color, val accent: Color, val mark: Color)
 
@@ -143,6 +148,20 @@ private val speeds = listOf(.8f, 1f, 1.2f, 1.5f, 1.8f, 2f)
             val position = (first - headerItems).coerceAtLeast(0)
             val done = last >= blocks.size + headerItems
             model.progress(article.id, position, if (done) 1f else if (blocks.isEmpty()) 0f else position.toFloat() / blocks.size)
+        }
+    }
+    // Reading time: counted while the article is on screen and being scrolled (or read aloud), not while the phone just lies there.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var lastMove by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val aloud by rememberUpdatedState(listening && voice.playing)
+    LaunchedEffect(list) { snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }.collect { lastMove = System.currentTimeMillis() } }
+    LaunchedEffect(article.id) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            lastMove = System.currentTimeMillis()
+            while (true) {
+                delay(15_000)
+                if (aloud || System.currentTimeMillis() - lastMove < 150_000) model.readFor(15)
+            }
         }
     }
     // While reading aloud, the page follows the voice.

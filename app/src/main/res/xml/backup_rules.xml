@@ -3,5 +3,6 @@
 <full-backup-content>
     <include domain="file" path="library.json" requireFlags="clientSideEncryption" />
     <include domain="file" path="settings.json" requireFlags="clientSideEncryption" />
+    <include domain="file" path="reading.json" requireFlags="clientSideEncryption" />
     <include domain="sharedpref" path="." requireFlags="clientSideEncryption" />
 </full-backup-content>

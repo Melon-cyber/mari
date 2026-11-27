@@ -41,6 +41,9 @@ data class Article(
     val minutes: Int get() = (words / 180).coerceAtLeast(1)
 }
 
+/** One day of reading: seconds spent and articles finished that day. */
+data class DayReading(val seconds: Int = 0, val finished: List<String> = emptyList())
+
 enum class ReaderTheme(val label: String) { DARK("Тёмная"), SEPIA("Сепия"), LIGHT("Светлая") }
 
 data class Settings(

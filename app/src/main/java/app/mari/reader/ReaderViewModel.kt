@@ -51,6 +51,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val store = app.store
     val articles = store.articles
     val settings = store.settings
+    val reading = store.reading
+    fun readFor(seconds: Int) = store.readFor(seconds)
     val voice = app.voice.state
     private val mNote = MutableStateFlow<Note?>(null)
     val note = mNote.asStateFlow()

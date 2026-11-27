@@ -110,6 +110,8 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var adding by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf(false) }
+    if (stats) ReadingSheet(model) { stats = false }
     if (adding) AddDialog(close = { adding = false }) { adding = false; model.add(it) }
     BackHandler(enabled = searching) { searching = false; query = ""; model.clearSearch() }
     if (searching) { SearchScreen(model, close = { searching = false; model.clearSearch() }); return }
@@ -128,6 +130,7 @@ fun openInBrowser(context: Context, url: String) { runCatching { context.startAc
                     IconButton(onClick = { searching = true }) { Icon(Icons.Rounded.Search, "Поиск") }
                 }
             }
+            item { ReadingLine(model) { stats = true } }
             if (articles.isNotEmpty()) item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Shelf.entries.forEach { s ->

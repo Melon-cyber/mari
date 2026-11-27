@@ -35,6 +35,32 @@ class Store(context: Context, private val scope: CoroutineScope) {
     private val mSettings = MutableStateFlow(runCatching { gson.fromJson(settingsFile.readText(), Settings::class.java) }.getOrNull()?.let(::repair) ?: Settings())
     val settings: StateFlow<Settings> = mSettings.asStateFlow()
 
+    private val readingFile = File(context.filesDir, "reading.json")
+    private val mReading = MutableStateFlow(runCatching {
+        gson.fromJson<Map<String, DayReading>>(readingFile.readText(), object : TypeToken<Map<String, DayReading>>() {}.type)
+    }.getOrNull().orEmpty().filterValues { it != null }.mapValues { (_, d) -> @Suppress("USELESS_ELVIS") d.copy(finished = d.finished ?: emptyList()) })
+    /** Day ("2026-11-25") → time spent reading and articles finished. */
+    val reading: StateFlow<Map<String, DayReading>> = mReading.asStateFlow()
+
+    /** Adds reading time to today. */
+    fun readFor(seconds: Int) = editReading { day -> day.copy(seconds = day.seconds + seconds) }
+
+    /** Counts an article as read today, once in its life. */
+    private fun finished(id: String) {
+        if (mReading.value.values.any { id in it.finished }) return
+        editReading { day -> day.copy(finished = day.finished + id) }
+    }
+
+    private fun editReading(change: (DayReading) -> DayReading) = synchronized(lock) {
+        val today = java.time.LocalDate.now().toString()
+        mReading.value = mReading.value + (today to change(mReading.value[today] ?: DayReading()))
+        runCatching {
+            val temp = File(readingFile.parentFile, "reading.json.tmp")
+            temp.writeText(gson.toJson(mReading.value))
+            if (!temp.renameTo(readingFile)) { readingFile.delete(); temp.renameTo(readingFile) }
+        }
+    }
+
     fun article(id: String): Article? = mArticles.value.firstOrNull { it.id == id }
 
     /** Saves a link and downloads its text in the background. Returns the article id. */
@@ -92,7 +118,11 @@ class Store(context: Context, private val scope: CoroutineScope) {
     }.getOrNull()
     fun saveTranslation(id: String, lines: List<String>) { runCatching { File(dir, "$id.tr.json").writeText(gson.toJson(lines)) } }
 
-    fun setStatus(id: String, status: Status) = update(id) { it?.copy(status = status, progress = if (status == Status.UNREAD && it.progress >= .98f) 0f else it.progress, position = if (status == Status.UNREAD && it.progress >= .98f) 0 else it.position) }
+    fun setStatus(id: String, status: Status) {
+        if (status == Status.ARCHIVED) finished(id)
+        setStatusOnly(id, status)
+    }
+    private fun setStatusOnly(id: String, status: Status) = update(id) { it?.copy(status = status, progress = if (status == Status.UNREAD && it.progress >= .98f) 0f else it.progress, position = if (status == Status.UNREAD && it.progress >= .98f) 0 else it.position) }
     fun favorite(id: String, on: Boolean) = update(id) { it?.copy(favorite = on) }
     fun addHighlight(id: String, h: Highlight) = update(id) { a ->
         // A new mark that overlaps old ones in the same paragraph joins them into one.
@@ -104,7 +134,11 @@ class Store(context: Context, private val scope: CoroutineScope) {
         }
     }
     fun removeHighlight(id: String, highlightId: String) = update(id) { it?.copy(highlights = it.highlights.filter { h -> h.id != highlightId }) }
-    fun progress(id: String, position: Int, share: Float) = update(id) { it?.copy(position = position, progress = share.coerceIn(0f, 1f)) }
+    fun progress(id: String, position: Int, share: Float) {
+        if (share >= .98f && (article(id)?.progress ?: 0f) < .98f) finished(id)
+        progressOnly(id, position, share)
+    }
+    private fun progressOnly(id: String, position: Int, share: Float) = update(id) { it?.copy(position = position, progress = share.coerceIn(0f, 1f)) }
 
     /** Removes an article; returns what is needed to bring it back. */
     fun delete(id: String): Pair<Article, List<Block>>? {
